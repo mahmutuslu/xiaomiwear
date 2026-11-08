@@ -24,8 +24,9 @@ App Vault sürümüne göre değişebilir.
 
 GitHub **Actions → Build module → son başarılı çalışma → Artifacts →
 MiHealthAlias-API102-debug** ZIP'ini indirip içindeki `app-debug.apk` dosyasını kur.
-İlk kurulum için debug imzalı APK oluşturulur; dağıtım için kişisel release imzası
-gerekmektedir. Kaynak koddan derleme:
+CI, her çalışmada farklı debug imzası kullanabilir; bu APK'lar önceki kurulumu
+doğrudan güncelleyemeyebilir. Kalıcı ve güncellenebilir dağıtım için kendi release
+imza anahtarınla imzalanmış APK gerekmektedir. Kaynak koddan derleme:
 
 ```bash
 gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
@@ -34,7 +35,9 @@ gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
 ## Kurulum / kullanım
 
 1. Resmî Mi Fitness (`com.xiaomi.wearable`) kurulu olsun. Sahte `com.mi.health` APK'sı yükleme.
-2. API 102 uyumlu LSPosed'i doğrula. Önceki APK farklı debug anahtarıyla imzalandıysa\n   `INSTALL_FAILED_UPDATE_INCOMPATIBLE` hatası alınır; eski MiHealth Alias APK'sını\n   kaldırıp yenisini kur, ardından LSPosed modülünü tekrar etkinleştir.
+2. API 102 uyumlu LSPosed'i doğrula. Önceki APK farklı debug anahtarıyla imzalandıysa
+   `INSTALL_FAILED_UPDATE_INCOMPATIBLE` hatası alınır; eski MiHealth Alias APK'sını
+   kaldırıp yenisini kur, ardından LSPosed modülünü tekrar etkinleştir.
 3. Modül APK'sını kur, LSPosed'den etkinleştir. Kapsam **Kişisel Asistan / App Vault**
    (`com.miui.personalassistant`) olmalıdır.
 4. App Vault'u kapatıp yeniden aç (gerekirse `su -c 'am force-stop com.miui.personalassistant'`).
