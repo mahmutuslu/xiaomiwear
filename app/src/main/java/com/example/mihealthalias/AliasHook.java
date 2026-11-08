@@ -1,131 +1,162 @@
 package com.example.mihealthalias;
 
 import android.content.ComponentName;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.ResolveInfo;
+import android.util.Log;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import de.robv.android.xposed.IXposedHookLoadPackage;
-import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XposedBridge;
-import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import io.github.libxposed.api.XposedInterface.Chain;
+import io.github.libxposed.api.XposedInterface.Hooker;
+import io.github.libxposed.api.XposedModule;
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam;
 
 /**
- * Inside the HyperOS widget picker (com.miui.personalassistant) only, make the installed
- * Mi Fitness (com.xiaomi.wearable) look like the China health app (com.mi.health).
+ * Process-local aliases for App Vault's widget picker.
  *
- * Outgoing: the installed-app list the picker uploads names com.mi.health.
- * Incoming: every lookup of com.mi.health (icons, widget providers, ComponentName) is
- * translated back to the real package.
+ * The installed Mi Fitness package is never renamed or replaced. Only App Vault
+ * can see selected package-list results under the com.mi.health alias; lookups
+ * for that alias are redirected to the genuine com.xiaomi.wearable package.
  */
-public class AliasHook implements IXposedHookLoadPackage {
-
+public final class AliasHook extends XposedModule {
+    private static final String TAG = "MiHealthAlias";
     private static final String TARGET = "com.miui.personalassistant";
-    private static final String REAL = "com.xiaomi.wearable";
-    private static final String ALIAS = "com.mi.health";
-
-    /** Replace any String argument equal to the alias with the real package name. */
-    private static final XC_MethodHook ARG_REWRITE = new XC_MethodHook() {
-        @Override
-        protected void beforeHookedMethod(MethodHookParam param) {
-            Object[] a = param.args;
-            if (a == null) {
-                return;
-            }
-            for (int i = 0; i < a.length; i++) {
-                if (ALIAS.equals(a[i])) {
-                    a[i] = REAL;
-                }
-            }
-        }
-    };
-
-    /** Rename the real package inside lists returned by PackageManager. */
-    private static final XC_MethodHook RENAME_RESULT = new XC_MethodHook() {
-        @Override
-        protected void afterHookedMethod(MethodHookParam param) {
-            Object r = param.getResult();
-            if (!(r instanceof List)) {
-                return;
-            }
-            for (Object o : (List<?>) r) {
-                rename(o);
-            }
-        }
-    };
-
-    private static void rename(Object o) {
-        try {
-            if (o instanceof PackageInfo) {
-                PackageInfo pi = (PackageInfo) o;
-                if (REAL.equals(pi.packageName)) {
-                    pi.packageName = ALIAS;
-                }
-            } else if (o instanceof ResolveInfo) {
-                ResolveInfo ri = (ResolveInfo) o;
-                if (ri.activityInfo != null && REAL.equals(ri.activityInfo.packageName)) {
-                    ri.activityInfo.packageName = ALIAS;
-                }
-            }
-        } catch (Throwable ignored) {
-            // never break the host app
-        }
-    }
+    private final AtomicBoolean initialized = new AtomicBoolean(false);
 
     @Override
-    public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lp) throws Throwable {
-        if (!TARGET.equals(lp.packageName)) {
+    public void onPackageReady(PackageReadyParam param) {
+        if (!TARGET.equals(param.getPackageName())
+                || !initialized.compareAndSet(false, true)) {
             return;
         }
-        log("loaded in process " + lp.processName);
 
-        // Lookups by package name: alias -> real
-        hookMethods("android.app.ApplicationPackageManager", new String[] {
-                "getPackageInfo", "getPackageInfoAsUser",
-                "getApplicationInfo", "getApplicationInfoAsUser",
-                "getApplicationIcon", "getLaunchIntentForPackage", "getPackageUid"
-        }, ARG_REWRITE);
-        hookMethods("android.content.pm.LauncherApps", new String[] {
-                "getActivityList", "isPackageEnabled", "getApplicationInfo"
-        }, ARG_REWRITE);
-        hookMethods("android.appwidget.AppWidgetManager", new String[] {
-                "getInstalledProvidersForPackage", "getInstalledProvidersForProfile"
-        }, ARG_REWRITE);
+        int count = 0;
+        ClassLoader loader = param.getClassLoader();
+        // Resolve the virtual package name against the real installed package.
+        count += hookMethods("android.app.ApplicationPackageManager", loader,
+                new String[] {
+                        "getPackageInfo", "getPackageInfoAsUser",
+                        "getApplicationInfo", "getApplicationInfoAsUser",
+                        "getApplicationIcon", "getLaunchIntentForPackage", "getPackageUid"
+                }, true, this::rewriteIncoming);
+        count += hookMethods("android.content.pm.LauncherApps", loader,
+                new String[] {
+                        "getActivityList", "isPackageEnabled", "getApplicationInfo"
+                }, true, this::rewriteIncoming);
+        count += hookMethods("android.appwidget.AppWidgetManager", loader,
+                new String[] {
+                        "getInstalledProvidersForPackage", "getInstalledProvidersForProfile"
+                }, true, this::rewriteIncoming);
 
-        // Lists the picker reads (and later uploads): real -> alias
-        hookMethods("android.app.ApplicationPackageManager", new String[] {
-                "getInstalledPackages", "getInstalledPackagesAsUser",
-                "queryIntentActivities", "queryIntentActivitiesAsUser"
-        }, RENAME_RESULT);
+        // Return an alias only for Mi Fitness entries in package/activity lists.
+        count += hookMethods("android.app.ApplicationPackageManager", loader,
+                new String[] {
+                        "getInstalledPackages", "getInstalledPackagesAsUser",
+                        "queryIntentActivities", "queryIntentActivitiesAsUser"
+                }, false, this::renameOutgoingResults);
 
-        // Widget providers the server returns are built as new ComponentName(alias, class).
-        try {
-            XposedBridge.hookAllConstructors(ComponentName.class, ARG_REWRITE);
-        } catch (Throwable t) {
-            log("ComponentName hook failed: " + t);
-        }
-        log("hooks installed");
+        // Server-provided ComponentName(alias, className) must resolve to real.
+        count += hookComponentNameConstructors();
+
+        log(Log.INFO, TAG, "API " + getApiVersion()
+                + ": " + count + " App Vault hooks installed");
     }
 
-    private static void hookMethods(String className, String[] names, XC_MethodHook callback) {
-        Class<?> c;
-        try {
-            c = Class.forName(className);
-        } catch (Throwable t) {
-            log("class not found " + className + ": " + t);
-            return;
+    private Object rewriteIncoming(Chain chain) throws Throwable {
+        Object[] replacement = AliasRules.rewriteAliasArguments(chain.getArgs());
+        return replacement == null ? chain.proceed() : chain.proceed(replacement);
+    }
+
+    private Object renameOutgoingResults(Chain chain) throws Throwable {
+        Object result = chain.proceed();
+        if (result instanceof List<?>) {
+            for (Object item : (List<?>) result) {
+                try {
+                    renameResult(item);
+                } catch (Throwable t) {
+                    // Never fail a PackageManager call on account of aliasing.
+                    log(Log.WARN, TAG, "Skipping incompatible package item: " + t);
+                }
+            }
         }
-        for (String n : names) {
-            try {
-                XposedBridge.hookAllMethods(c, n, callback);
-            } catch (Throwable t) {
-                log("hook failed " + className + "." + n + ": " + t);
+        return result;
+    }
+
+    private static void renameResult(Object item) {
+        if (item instanceof PackageInfo) {
+            PackageInfo info = (PackageInfo) item;
+            if (AliasRules.REAL.equals(info.packageName)) {
+                info.packageName = AliasRules.ALIAS;
+                renameApplicationInfo(info.applicationInfo);
+            }
+        } else if (item instanceof ResolveInfo) {
+            ResolveInfo info = (ResolveInfo) item;
+            ActivityInfo activity = info.activityInfo;
+            if (activity != null && AliasRules.REAL.equals(activity.packageName)) {
+                activity.packageName = AliasRules.ALIAS;
+                renameApplicationInfo(activity.applicationInfo);
             }
         }
     }
 
-    private static void log(String s) {
-        XposedBridge.log("MiHealthAlias: " + s);
+    private static void renameApplicationInfo(ApplicationInfo info) {
+        if (info != null && AliasRules.REAL.equals(info.packageName)) {
+            info.packageName = AliasRules.ALIAS;
+        }
+    }
+
+    private int hookMethods(String className, ClassLoader loader, String[] names,
+                            boolean needsStringArgument, Hooker callback) {
+        final Class<?> clazz;
+        try {
+            clazz = Class.forName(className, false, loader);
+        } catch (Throwable t) {
+            log(Log.WARN, TAG, "Class unavailable: " + className + ": " + t);
+            return 0;
+        }
+
+        int installed = 0;
+        List<String> wanted = Arrays.asList(names);
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (!wanted.contains(method.getName())) {
+                continue;
+            }
+            if (needsStringArgument && !Arrays.asList(method.getParameterTypes())
+                    .contains(String.class)) {
+                continue;
+            }
+            try {
+                hook(method).setId("mihealth:" + method.toGenericString()).intercept(callback);
+                installed++;
+            } catch (Throwable t) {
+                log(Log.WARN, TAG, "Hook unavailable: " + method + ": " + t);
+            }
+        }
+        return installed;
+    }
+
+    private int hookComponentNameConstructors() {
+        int installed = 0;
+        for (Constructor<?> constructor : ComponentName.class.getDeclaredConstructors()) {
+            Class<?>[] args = constructor.getParameterTypes();
+            if (args.length == 0 || args[0] != String.class) {
+                continue;
+            }
+            try {
+                hook(constructor).setId("mihealth:" + constructor.toGenericString())
+                        .intercept(this::rewriteIncoming);
+                installed++;
+            } catch (Throwable t) {
+                log(Log.WARN, TAG, "ComponentName hook unavailable: " + t);
+            }
+        }
+        return installed;
     }
 }

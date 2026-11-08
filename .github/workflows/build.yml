@@ -2,6 +2,7 @@ name: Build module
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -19,10 +20,27 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon --stacktrace
+      - name: Run tests and build API 102 debug APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Validate modern Xposed APK metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=app/build/outputs/apk/debug/app-debug.apk
+          entries="$(unzip -Z1 "$apk")"
+          for item in META-INF/xposed/java_init.list META-INF/xposed/module.prop META-INF/xposed/scope.list; do
+            printf '%s\n' "$entries" | grep -Fx "$item"
+          done
+          if printf '%s\n' "$entries" | grep -Fx 'assets/xposed_init'; then
+            echo "Legacy Xposed entry detected" >&2
+            exit 1
+          fi
+          unzip -p "$apk" META-INF/xposed/module.prop | grep -Fx 'targetApiVersion=102'
+          unzip -p "$apk" META-INF/xposed/module.prop | grep -Fx 'minApiVersion=102'
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MiHealthAlias-debug
+          name: MiHealthAlias-API102-debug
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error

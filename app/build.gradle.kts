@@ -10,8 +10,8 @@ android {
         applicationId = "com.example.mihealthalias"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 200
+        versionName = "2.0.0"
     }
 
     compileOptions {
@@ -21,5 +21,7 @@ android {
 }
 
 dependencies {
-    compileOnly(project(":xposed-stub"))
+    // Runtime is provided by an API 102 capable Xposed framework.
+    compileOnly("io.github.libxposed:api:102.0.0")
+    testImplementation("junit:junit:4.13.2")
 }
