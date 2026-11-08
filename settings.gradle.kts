@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "MiHealthAlias"
-include(":app", ":xposed-stub")
+include(":app")
