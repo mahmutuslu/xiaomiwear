@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mi Fitness / Xiaomi Wear orange ring, scalable for non-adaptive icon surfaces. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M0,0 H108 V108 H0 Z" />
+    <path android:fillColor="#FFFF592F"
+        android:pathData="M54,18 A36,36 0,1 1,54 90 A36,36 0,1 1,54 18 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M54,33 A21,21 0,1 1,54 75 A21,21 0,1 1,54 33 Z" />
+</vector>
