@@ -20,10 +20,10 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Run tests and build API 102 debug APK
+      - name: Run tests and build API 102 APK
         run: gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon --stacktrace
 
-      - name: Validate modern Xposed APK metadata
+      - name: Validate modern Xposed APK metadata and icon
         shell: bash
         run: |
           set -euo pipefail
@@ -38,9 +38,43 @@ jobs:
           fi
           unzip -p "$apk" META-INF/xposed/module.prop | grep -Fx 'targetApiVersion=102'
           unzip -p "$apk" META-INF/xposed/module.prop | grep -Fx 'minApiVersion=102'
+          apktool_bin="$(find "$ANDROID_HOME/build-tools" -name aapt -type f | sort -V | tail -1)"
+          "$apktool_bin" dump badging "$apk" | grep -F "package: name='com.example.mihealthalias'"
+          "$apktool_bin" dump badging "$apk" | grep -F "versionName='2.1.0'"
+          "$apktool_bin" dump badging "$apk" | grep -E "^application:.*icon="
 
       - uses: actions/upload-artifact@v4
         with:
-          name: MiHealthAlias-API102-debug
+          name: MiHealthAlias-API102-2.1.0
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  publish-release:
+    # Publish only after the main branch has passed all tests.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: MiHealthAlias-API102-2.1.0
+          path: dist
+      - name: Publish tagged APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v2.1.0 >/dev/null 2>&1; then
+            echo "v2.1.0 already exists; not replacing an immutable release"
+            exit 0
+          fi
+          mv dist/app-debug.apk dist/MiHealthAlias-v2.1.0-API102.apk
+          gh release create v2.1.0 dist/MiHealthAlias-v2.1.0-API102.apk \
+            --target "$GITHUB_SHA" \
+            --title "MiHealth Alias v2.1.0 — Xposed API 102 (Final)" \
+            --notes-file RELEASE_NOTES.md \
+            --latest

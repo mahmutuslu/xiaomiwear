@@ -1,10 +1,17 @@
-# MiHealth Alias — libxposed API 102
+# MiHealth Alias v2.1.0 — libxposed API 102
 
 Mi Fitness (`com.xiaomi.wearable`) uygulamasını **yalnızca HyperOS App Vault widget seçicisine**
 (`com.miui.personalassistant`) Mi Health (`com.mi.health`) takma adıyla gösteren
 LSPosed modülü. Mi Fitness APK'sını, eşleşmiş saati veya sistem paketlerini değiştirmez.
 
-## Sürüm 2.0.0: gerçek API 102 geçişi
+## Sürüm 2.1.0: nihai paket ve Xiaomi Wear / Mi Fitness ikonu
+
+- Turuncu halka şeklindeki Xiaomi Wear / Mi Fitness simgesi, modülün Android ve LSPosed girişinde görünür.
+- Adaptif ve klasik ikon kaynakları eklendi.
+- APK, GitHub Releases altından tek dosya olarak indirilir.
+- Paket kimliği `com.example.mihealthalias` olarak korunmuştur; orijinal Mi Fitness paketini değiştirmez.
+
+## API 102 geçişi
 
 - Eski `de.robv.android.xposed` / `assets/xposed_init` tamamen kaldırıldı.
 - Modern `io.github.libxposed:api:102.0.0` kullanılır (`compileOnly`).
@@ -22,11 +29,13 @@ App Vault sürümüne göre değişebilir.
 
 ## Derleme ve APK
 
-GitHub **Actions → Build module → son başarılı çalışma → Artifacts →
-MiHealthAlias-API102-debug** ZIP'ini indirip içindeki `app-debug.apk` dosyasını kur.
-CI, her çalışmada farklı debug imzası kullanabilir; bu APK'lar önceki kurulumu
-doğrudan güncelleyemeyebilir. Kalıcı ve güncellenebilir dağıtım için kendi release
-imza anahtarınla imzalanmış APK gerekmektedir. Kaynak koddan derleme:
+**Önerilen indirme:** [GitHub Releases — v2.1.0](https://github.com/mahmutuslu/xiaomiwear/releases/tag/v2.1.0)
+altında bulunan `MiHealthAlias-v2.1.0-API102.apk` dosyasını yükle.
+Alternatif: GitHub Actions → Build module → son başarılı çalışma → Artifacts →
+`MiHealthAlias-API102-2.1.0` ZIP'i içindeki `app-debug.apk`.
+Dağıtılan APK debug imzası taşır. Farklı CI derlemeleri farklı imzalar kullanabilir;
+yalnızca aynı imzayla üretilmiş APK'lar birbirinin üzerine kurulabilir.
+Kararlı güncelleme dağıtımı için kullanıcıya ait güvenli release imzası gereklidir. Kaynak koddan derleme:
 
 ```bash
 gradle :app:testDebugUnitTest :app:assembleDebug --no-daemon
@@ -54,3 +63,8 @@ derlenmesi **gerçek cihaz/ROM üzerinde widget'ın göründüğünü kanıtlama
 
 Geri almak için LSPosed'de modülü devre dışı bırak ve App Vault'u yeniden başlat.
 Önceki sürüme dönmek için gerekiyorsa bu sürümü kaldırıp eski APK'yı tekrar kur.
+
+## Marka notu
+
+Simge, Xiaomi Wear / Mi Fitness turuncu halka görselinin vektör uyarlamasıdır.
+Bu bağımsız topluluk modülü resmî Xiaomi yazılımı değildir.
